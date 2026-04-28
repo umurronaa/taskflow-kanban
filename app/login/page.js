@@ -6,68 +6,78 @@ import { useRouter } from 'next/navigation';
 export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false); // Giriş/Kayıt modu
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async () => {
-    // BOŞ VERİ KONTROLÜ
-    if (!email || !password) {
-      alert("Lütfen e-posta ve şifre alanlarını doldurun.");
-      return;
-    }
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      alert("Hata: " + error.message);
+    if (isRegisterMode) {
+      // KAYIT OLMA AKIŞI
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        alert("Kayıt Hatası: " + error.message);
+      } else {
+        alert('Hesap oluşturuldu! Şimdi giriş yapabilirsiniz.');
+        setIsRegisterMode(false); // Giriş moduna geri dön
+      }
     } else {
-      alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
+      // GİRİŞ YAPMA AKIŞI
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        // Jürinin istediği özel hata kontrolü
+        if (error.message.includes("Invalid login credentials")) {
+          alert("Hata: Bu e-posta ile kayıtlı bir hesap bulunamadı veya şifre yanlış.");
+        } else {
+          alert("Giriş Hatası: " + error.message);
+        }
+      } else {
+        router.push('/');
+      }
     }
-  };
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      alert("Lütfen e-posta ve şifre alanlarını doldurun.");
-      return;
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      alert("Hata: " + error.message);
-    } else {
-      router.push('/'); 
-    }
+    setLoading(false);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' }}>
-        <h1 style={{ textAlign: 'center', marginBottom: '24px', fontSize: '24px', fontWeight: '800', color: '#1e293b' }}>TaskFlow Giriş</h1>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'sans-serif' }}>
+      <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '400px' }}>
+        <h1 style={{ textAlign: 'center', marginBottom: '8px', fontSize: '26px', fontWeight: '900', color: '#1e293b' }}>
+          TaskFlow {isRegisterMode ? 'Kayıt' : 'Giriş'}
+        </h1>
+        <p style={{ textAlign: 'center', color: '#64748b', marginBottom: '32px', fontSize: '14px' }}>
+          {isRegisterMode ? 'Hemen ekibe katıl ve yönetmeye başla.' : 'Projelerine kaldığın yerden devam et.'}
+        </p>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <input 
-            type="email" 
-            placeholder="E-posta" 
-            autoComplete="email" // Tarayıcı desteği için
-            style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none' }}
+            type="email" placeholder="E-posta adresi" required
+            style={{ padding: '14px', border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none', fontSize: '15px' }}
             onChange={(e) => setEmail(e.target.value)} 
           />
           <input 
-            type="password" 
-            placeholder="Şifre" 
-            autoComplete="current-password"
-            style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none' }}
+            type="password" placeholder="Şifre" required
+            style={{ padding: '14px', border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none', fontSize: '15px' }}
             onChange={(e) => setPassword(e.target.value)} 
           />
           
-          <button onClick={handleLogin} style={{ padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Giriş Yap</button>
-          <button onClick={handleSignUp} style={{ padding: '12px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Hesap Oluştur</button>
+          <button 
+            type="submit" disabled={loading}
+            style={{ padding: '14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px', transition: '0.2s' }}
+          >
+            {loading ? 'İşleniyor...' : (isRegisterMode ? 'Hesap Oluştur' : 'Giriş Yap')}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: '#475569' }}>
+          {isRegisterMode ? 'Zaten hesabın var mı?' : 'Henüz hesabın yok mu?'}
+          <button 
+            onClick={() => setIsRegisterMode(!isRegisterMode)}
+            style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '700', cursor: 'pointer', marginLeft: '5px' }}
+          >
+            {isRegisterMode ? 'Giriş Yap' : 'Hemen Kaydol'}
+          </button>
         </div>
       </div>
     </div>
