@@ -2,15 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
   DndContext, rectIntersection, KeyboardSensor, PointerSensor, 
-  useSensor, useSensors, DragOverlay, TouchSensor // TouchSensor eklendi
+  useSensor, useSensors, DragOverlay, TouchSensor 
 } from '@dnd-kit/core';
 import { 
   arrayMove, SortableContext, sortableKeyboardCoordinates, 
   verticalListSortingStrategy, useSortable 
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+export const dynamic = "force-dynamic";
 
 // --- KART BİLEŞENİ ---
 function TaskCard({ title, isDragging, isOverlay, onDelete }) {
@@ -21,8 +24,7 @@ function TaskCard({ title, isDragging, isOverlay, onDelete }) {
       marginBottom: '10px', cursor: isOverlay ? 'grabbing' : 'grab',
       border: '1px solid #e2e8f0', fontSize: '14px', color: '#334155',
       opacity: isDragging ? 0.3 : 1, display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center',
-      touchAction: 'none' // Mobilde tarayıcı hareketlerini engellemek için
+      alignItems: 'center', touchAction: 'none'
     }}>
       <span style={{ fontWeight: '500' }}>{title}</span>
       {!isOverlay && (
@@ -46,23 +48,16 @@ function SortableTaskCard({ id, title, onDelete }) {
 // --- SÜTUN BİLEŞENİ ---
 function ColumnContainer({ id, title, items, children }) {
   const { setNodeRef } = useSortable({ id });
-
   return (
     <div ref={setNodeRef} style={{ 
-      width: '100%', // Mobilde tam genişlik
-      maxWidth: '350px', // PC'de çok yayılmasın
-      backgroundColor: '#f1f5f9', borderRadius: '16px', 
-      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '300px',
-      boxSizing: 'border-box'
+      flex: '0 0 280px', width: '280px', backgroundColor: '#f1f5f9', borderRadius: '16px', 
+      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '450px', boxSizing: 'border-box'
     }}>
       <h3 style={{ margin: '0 0 20px 4px', color: '#475569', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase' }}>
         {title}
       </h3>
-      
       <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-        <div style={{ flexGrow: 1 }}>
-          {children}
-        </div>
+        <div style={{ flexGrow: 1 }}>{children}</div>
       </SortableContext>
     </div>
   );
@@ -76,11 +71,30 @@ export default function TaskFlow() {
   });
   const [activeId, setActiveId] = useState(null);
   const [newTasks, setNewTasks] = useState({ todo: '', doing: '', done: '' });
+  const [user, setUser] = useState(null);
+  const router = useRouter();
 
-  useEffect(() => { fetchTasks(); }, []);
+  // 1. OTURUM KONTROLÜ
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+      } else {
+        setUser(user);
+        fetchTasks(user.id);
+      }
+    };
+    checkUser();
+  }, [router]);
 
-  const fetchTasks = async () => {
-    const { data, error } = await supabase.from('tasks').select('*').order('order_index');
+  const fetchTasks = async (userId) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId) // Sadece kullanıcıya ait veriler
+      .order('order_index');
+    
     if (error) console.error('Hata:', error);
     else {
       const newCols = { todo: { ...columns.todo, items: [] }, doing: { ...columns.doing, items: [] }, done: { ...columns.done, items: [] } };
@@ -93,12 +107,18 @@ export default function TaskFlow() {
 
   const addTask = async (colId) => {
     const val = newTasks[colId].trim();
-    if (!val) return;
-    const newTask = { id: Date.now().toString(), content: val, column_id: colId, order_index: columns[colId].items.length };
+    if (!val || !user) return;
+    
+    const newTask = { 
+      id: Date.now().toString(), 
+      content: val, 
+      column_id: colId, 
+      order_index: columns[colId].items.length,
+      user_id: user.id // Kullanıcı ID'sini ekliyoruz
+    };
     
     setColumns(prev => ({ ...prev, [colId]: { ...prev[colId], items: [...prev[colId].items, { id: newTask.id, content: newTask.content }] } }));
     setNewTasks(prev => ({ ...prev, [colId]: '' }));
-
     await supabase.from('tasks').insert([newTask]);
   };
 
@@ -107,37 +127,28 @@ export default function TaskFlow() {
     await supabase.from('tasks').delete().eq('id', taskId);
   };
 
-  // --- MOBİL İÇİN KRİTİK SENSÖR AYARI ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { 
-      activationConstraint: { distance: 5 } 
-    }), 
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 } // 250ms basılı tutunca sürükleme başlar, sayfayı kaydırmayı bozmaz
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), 
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  if (!user) return <div style={{ padding: '50px', textAlign: 'center' }}>Yükleniyor...</div>;
+
   return (
-    <div style={{ 
-      padding: '20px 10px', // Mobilde kenar boşluklarını azalttık
-      backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' 
-    }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px', color: '#0f172a', fontWeight: '800', fontSize: '24px' }}>TaskFlow Kanban</h1>
+    <div style={{ padding: '40px 10px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '900px', margin: '0 auto 40px' }}>
+        <h1 style={{ color: '#0f172a', fontWeight: '800', fontSize: '28px', margin: 0 }}>TaskFlow Kanban</h1>
+        <button onClick={handleLogout} style={{ padding: '8px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Çıkış Yap</button>
+      </div>
       
-      <DndContext 
-        sensors={sensors} 
-        collisionDetection={rectIntersection}
-        onDragStart={(e) => setActiveId(e.active.id)} 
-        onDragEnd={handleDragEnd}
-      >
-        <div style={{ 
-          display: 'flex', 
-          gap: '20px', 
-          flexWrap: 'wrap', // Mobilde sütunların alt alta gelmesini sağlar
-          justifyContent: 'center', 
-          alignItems: 'flex-start' 
-        }}>
+      <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={(e) => setActiveId(e.active.id)} onDragEnd={handleDragEnd}>
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'flex-start', alignItems: 'flex-start', overflowX: 'auto', paddingBottom: '20px', paddingLeft: '10px', paddingRight: '10px', WebkitOverflowScrolling: 'touch' }}>
           {Object.keys(columns).map((colId) => (
             <ColumnContainer key={colId} id={colId} title={columns[colId].title} items={columns[colId].items}>
               {columns[colId].items.map((task) => (
@@ -160,15 +171,12 @@ export default function TaskFlow() {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
-
     const findColumn = (id) => {
       if (id in columns) return id;
       return Object.keys(columns).find(key => columns[key].items.some(item => item.id === id));
     };
-
     const activeCol = findColumn(active.id);
     const overCol = findColumn(over.id);
-
     if (!activeCol || !overCol) return;
 
     if (activeCol !== overCol) {
