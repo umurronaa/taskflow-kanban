@@ -4,13 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { 
   DndContext, rectIntersection, KeyboardSensor, PointerSensor, 
-  useSensor, useSensors, DragOverlay, TouchSensor // TouchSensor eklendi
+  useSensor, useSensors, DragOverlay, TouchSensor 
 } from '@dnd-kit/core';
 import { 
   arrayMove, SortableContext, sortableKeyboardCoordinates, 
   verticalListSortingStrategy, useSortable 
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+export const dynamic = "force-dynamic";
 
 // --- KART BİLEŞENİ ---
 function TaskCard({ title, isDragging, isOverlay, onDelete }) {
@@ -21,8 +23,7 @@ function TaskCard({ title, isDragging, isOverlay, onDelete }) {
       marginBottom: '10px', cursor: isOverlay ? 'grabbing' : 'grab',
       border: '1px solid #e2e8f0', fontSize: '14px', color: '#334155',
       opacity: isDragging ? 0.3 : 1, display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center',
-      touchAction: 'none' // Mobilde tarayıcı hareketlerini engellemek için
+      alignItems: 'center', touchAction: 'none'
     }}>
       <span style={{ fontWeight: '500' }}>{title}</span>
       {!isOverlay && (
@@ -49,10 +50,10 @@ function ColumnContainer({ id, title, items, children }) {
 
   return (
     <div ref={setNodeRef} style={{ 
-      width: '100%', // Mobilde tam genişlik
-      maxWidth: '350px', // PC'de çok yayılmasın
+      flex: '0 0 280px', // Sütunların büzülmesini engeller, yan yana dizilmeyi zorlar
+      width: '280px',
       backgroundColor: '#f1f5f9', borderRadius: '16px', 
-      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '300px',
+      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '450px',
       boxSizing: 'border-box'
     }}>
       <h3 style={{ margin: '0 0 20px 4px', color: '#475569', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase' }}>
@@ -107,36 +108,33 @@ export default function TaskFlow() {
     await supabase.from('tasks').delete().eq('id', taskId);
   };
 
-  // --- MOBİL İÇİN KRİTİK SENSÖR AYARI ---
   const sensors = useSensors(
-    useSensor(PointerSensor, { 
-      activationConstraint: { distance: 5 } 
-    }), 
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 } // 250ms basılı tutunca sürükleme başlar, sayfayı kaydırmayı bozmaz
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), 
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   return (
-    <div style={{ 
-      padding: '20px 10px', // Mobilde kenar boşluklarını azalttık
-      backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' 
-    }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px', color: '#0f172a', fontWeight: '800', fontSize: '24px' }}>TaskFlow Kanban</h1>
+    <div style={{ padding: '40px 10px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      <h1 style={{ textAlign: 'center', marginBottom: '40px', color: '#0f172a', fontWeight: '800', fontSize: '28px' }}>TaskFlow Kanban</h1>
       
       <DndContext 
         sensors={sensors} 
-        collisionDetection={rectIntersection}
+        collisionDetection={rectIntersection} 
         onDragStart={(e) => setActiveId(e.active.id)} 
         onDragEnd={handleDragEnd}
       >
+        {/* ANA KAP: Kaydırma özelliği buraya eklendi */}
         <div style={{ 
           display: 'flex', 
           gap: '20px', 
-          flexWrap: 'wrap', // Mobilde sütunların alt alta gelmesini sağlar
-          justifyContent: 'center', 
-          alignItems: 'flex-start' 
+          justifyContent: 'flex-start', 
+          alignItems: 'flex-start',
+          overflowX: 'auto', // Yatay kaydırma
+          paddingBottom: '20px',
+          paddingLeft: '10px',
+          paddingRight: '10px',
+          WebkitOverflowScrolling: 'touch' 
         }}>
           {Object.keys(columns).map((colId) => (
             <ColumnContainer key={colId} id={colId} title={columns[colId].title} items={columns[colId].items}>
