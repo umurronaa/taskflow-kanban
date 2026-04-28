@@ -10,7 +10,7 @@ import {
   useDroppable,
   useDraggable
 } from '@dnd-kit/core';
-import { supabase } from '@/lib/supabase.js';
+import { supabase } from '../lib/supabase.js';
 
 export const dynamic = "force-dynamic";
 
