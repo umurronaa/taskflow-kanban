@@ -50,7 +50,9 @@ function ColumnContainer({ id, title, items, children }) {
   const { setNodeRef } = useSortable({ id });
   return (
     <div ref={setNodeRef} style={{ 
-      flex: '0 0 280px', width: '280px', backgroundColor: '#f1f5f9', borderRadius: '16px', 
+      flex: '0 0 280px', // Sütunların büzülmesini engeller
+      width: '280px', 
+      backgroundColor: '#f1f5f9', borderRadius: '16px', 
       padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '450px', boxSizing: 'border-box'
     }}>
       <h3 style={{ margin: '0 0 20px 4px', color: '#475569', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase' }}>
@@ -92,14 +94,21 @@ export default function TaskFlow() {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId) // Sadece kullanıcıya ait veriler
+      .eq('user_id', userId) // Sadece giriş yapan kullanıcının verilerini çek
       .order('order_index');
     
-    if (error) console.error('Hata:', error);
-    else {
-      const newCols = { todo: { ...columns.todo, items: [] }, doing: { ...columns.doing, items: [] }, done: { ...columns.done, items: [] } };
+    if (error) {
+      console.error('Veri çekme hatası:', error);
+    } else {
+      const newCols = { 
+        todo: { ...columns.todo, items: [] }, 
+        doing: { ...columns.doing, items: [] }, 
+        done: { ...columns.done, items: [] } 
+      };
       data.forEach(task => {
-        if (newCols[task.column_id]) newCols[task.column_id].items.push({ id: task.id, content: task.content });
+        if (newCols[task.column_id]) {
+          newCols[task.column_id].items.push({ id: task.id, content: task.content });
+        }
       });
       setColumns(newCols);
     }
@@ -114,16 +123,26 @@ export default function TaskFlow() {
       content: val, 
       column_id: colId, 
       order_index: columns[colId].items.length,
-      user_id: user.id // Kullanıcı ID'sini ekliyoruz
+      user_id: user.id // Kullanıcı ID'sini mutlaka ekliyoruz
     };
     
-    setColumns(prev => ({ ...prev, [colId]: { ...prev[colId], items: [...prev[colId].items, { id: newTask.id, content: newTask.content }] } }));
+    // Önce arayüzü güncelle (Hız hissi için)
+    setColumns(prev => ({ 
+      ...prev, 
+      [colId]: { ...prev[colId], items: [...prev[colId].items, { id: newTask.id, content: newTask.content }] } 
+    }));
     setNewTasks(prev => ({ ...prev, [colId]: '' }));
-    await supabase.from('tasks').insert([newTask]);
+
+    // Sonra veritabanına kaydet
+    const { error } = await supabase.from('tasks').insert([newTask]);
+    if (error) console.error('Ekleme hatası:', error);
   };
 
   const deleteTask = async (colId, taskId) => {
-    setColumns(prev => ({ ...prev, [colId]: { ...prev[colId], items: prev[colId].items.filter(i => i.id !== taskId) } }));
+    setColumns(prev => ({ 
+      ...prev, 
+      [colId]: { ...prev[colId], items: prev[colId].items.filter(i => i.id !== taskId) } 
+    }));
     await supabase.from('tasks').delete().eq('id', taskId);
   };
 
@@ -142,20 +161,38 @@ export default function TaskFlow() {
 
   return (
     <div style={{ padding: '40px 10px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '900px', margin: '0 auto 40px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1000px', margin: '0 auto 40px' }}>
         <h1 style={{ color: '#0f172a', fontWeight: '800', fontSize: '28px', margin: 0 }}>TaskFlow Kanban</h1>
         <button onClick={handleLogout} style={{ padding: '8px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Çıkış Yap</button>
       </div>
       
       <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={(e) => setActiveId(e.active.id)} onDragEnd={handleDragEnd}>
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'flex-start', alignItems: 'flex-start', overflowX: 'auto', paddingBottom: '20px', paddingLeft: '10px', paddingRight: '10px', WebkitOverflowScrolling: 'touch' }}>
+        {/* ANA KAPSAYICI: Sağa kaydırma özelliği eklendi */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '20px', 
+          justifyContent: 'flex-start', 
+          alignItems: 'flex-start', 
+          overflowX: 'auto', // Kritik: Sağa kaydırmayı sağlar
+          paddingBottom: '30px',
+          paddingLeft: '10px',
+          paddingRight: '10px',
+          WebkitOverflowScrolling: 'touch' 
+        }}>
           {Object.keys(columns).map((colId) => (
             <ColumnContainer key={colId} id={colId} title={columns[colId].title} items={columns[colId].items}>
               {columns[colId].items.map((task) => (
                 <SortableTaskCard key={task.id} id={task.id} title={task.content} onDelete={() => deleteTask(colId, task.id)} />
               ))}
               <div style={{ marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid #e2e8f0' }}>
-                <input type="text" placeholder="+ Kart ekle..." value={newTasks[colId]} onChange={(e) => setNewTasks(prev => ({ ...prev, [colId]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && addTask(colId)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box' }} />
+                <input 
+                  type="text" 
+                  placeholder="+ Kart ekle..." 
+                  value={newTasks[colId]} 
+                  onChange={(e) => setNewTasks(prev => ({ ...prev, [colId]: e.target.value }))} 
+                  onKeyDown={(e) => e.key === 'Enter' && addTask(colId)} 
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box' }} 
+                />
               </div>
             </ColumnContainer>
           ))}
@@ -171,12 +208,15 @@ export default function TaskFlow() {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
+
     const findColumn = (id) => {
       if (id in columns) return id;
       return Object.keys(columns).find(key => columns[key].items.some(item => item.id === id));
     };
+
     const activeCol = findColumn(active.id);
     const overCol = findColumn(over.id);
+
     if (!activeCol || !overCol) return;
 
     if (activeCol !== overCol) {
