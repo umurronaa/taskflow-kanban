@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { 
   DndContext, rectIntersection, KeyboardSensor, PointerSensor, 
-  useSensor, useSensors, DragOverlay 
+  useSensor, useSensors, DragOverlay, TouchSensor // TouchSensor eklendi
 } from '@dnd-kit/core';
 import { 
   arrayMove, SortableContext, sortableKeyboardCoordinates, 
@@ -21,12 +21,13 @@ function TaskCard({ title, isDragging, isOverlay, onDelete }) {
       marginBottom: '10px', cursor: isOverlay ? 'grabbing' : 'grab',
       border: '1px solid #e2e8f0', fontSize: '14px', color: '#334155',
       opacity: isDragging ? 0.3 : 1, display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
+      touchAction: 'none' // Mobilde tarayıcı hareketlerini engellemek için
     }}>
       <span style={{ fontWeight: '500' }}>{title}</span>
       {!isOverlay && (
         <button onClick={(e) => { e.stopPropagation(); onDelete(); }} 
-                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '18px' }}>×</button>
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '18px', padding: '0 5px' }}>×</button>
       )}
     </div>
   );
@@ -42,14 +43,17 @@ function SortableTaskCard({ id, title, onDelete }) {
   );
 }
 
-// --- SÜTUN BİLEŞENİ (BOŞ OLSA BİLE ALGILANIR) ---
+// --- SÜTUN BİLEŞENİ ---
 function ColumnContainer({ id, title, items, children }) {
-  const { setNodeRef } = useSortable({ id }); // Sütunu da droppable yapıyoruz
+  const { setNodeRef } = useSortable({ id });
 
   return (
     <div ref={setNodeRef} style={{ 
-      width: '300px', backgroundColor: '#f1f5f9', borderRadius: '16px', 
-      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '300px' 
+      width: '100%', // Mobilde tam genişlik
+      maxWidth: '350px', // PC'de çok yayılmasın
+      backgroundColor: '#f1f5f9', borderRadius: '16px', 
+      padding: '16px', display: 'flex', flexDirection: 'column', minHeight: '300px',
+      boxSizing: 'border-box'
     }}>
       <h3 style={{ margin: '0 0 20px 4px', color: '#475569', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase' }}>
         {title}
@@ -103,19 +107,37 @@ export default function TaskFlow() {
     await supabase.from('tasks').delete().eq('id', taskId);
   };
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  // --- MOBİL İÇİN KRİTİK SENSÖR AYARI ---
+  const sensors = useSensors(
+    useSensor(PointerSensor, { 
+      activationConstraint: { distance: 5 } 
+    }), 
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 } // 250ms basılı tutunca sürükleme başlar, sayfayı kaydırmayı bozmaz
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   return (
-    <div style={{ padding: '50px 20px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '50px', color: '#0f172a', fontWeight: '800' }}>TaskFlow Kanban</h1>
+    <div style={{ 
+      padding: '20px 10px', // Mobilde kenar boşluklarını azalttık
+      backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' 
+    }}>
+      <h1 style={{ textAlign: 'center', marginBottom: '30px', color: '#0f172a', fontWeight: '800', fontSize: '24px' }}>TaskFlow Kanban</h1>
       
       <DndContext 
         sensors={sensors} 
-        collisionDetection={rectIntersection} // Alan kesişimi algılaması
+        collisionDetection={rectIntersection}
         onDragStart={(e) => setActiveId(e.active.id)} 
         onDragEnd={handleDragEnd}
       >
-        <div style={{ display: 'flex', gap: '25px', justifyContent: 'center', alignItems: 'flex-start' }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: '20px', 
+          flexWrap: 'wrap', // Mobilde sütunların alt alta gelmesini sağlar
+          justifyContent: 'center', 
+          alignItems: 'flex-start' 
+        }}>
           {Object.keys(columns).map((colId) => (
             <ColumnContainer key={colId} id={colId} title={columns[colId].title} items={columns[colId].items}>
               {columns[colId].items.map((task) => (
